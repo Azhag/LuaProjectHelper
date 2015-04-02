@@ -85,7 +85,7 @@ class LuaProjectAutoCompletion(sublime_plugin.EventListener):
       ret = []
       ret.extend(LuaProject.autoCompletionList)
       
-      # Remove default completions
+      # Remove default completions, to avoid duplicate local variables
       # ret.extend(defCompletions)
       
       return (ret, complFlags)
