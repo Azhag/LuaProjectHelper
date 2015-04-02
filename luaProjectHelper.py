@@ -84,7 +84,10 @@ class LuaProjectAutoCompletion(sublime_plugin.EventListener):
         
       ret = []
       ret.extend(LuaProject.autoCompletionList)
-      ret.extend(defCompletions)
+      
+      # Remove default completions
+      # ret.extend(defCompletions)
+      
       return (ret, complFlags)
 
     return (defCompletions, complFlags)
@@ -114,10 +117,14 @@ class LuaProject:
 
 
 ####################################################################################################
+
+# Added support for Fields and args.parse options
 class ProjectDBGenerator:
   funcFindProg = re.compile('function\s+(.+?)\s*\)')
   wsProg = re.compile(r'\s+')
   reMethodArgs = re.compile("\((.*)\)")
+  reSelfField = re.compile("\s*self\.(\w+?)\s=")
+  reArgsOption = re.compile("\s*\{\'(\w+?)\',.*args.*\}")
 
   def update():
     LuaProject.clear()
@@ -150,7 +157,7 @@ class ProjectDBGenerator:
     return fileDic
 
   #-----------------------------------------------------------------------------------------------
-  def parseLuaFile(buf):
+  def parseLuaFile(buf, fileName):
     fileDic = {}
     lineList = buf.splitlines()
     lineCounter = 0
@@ -190,6 +197,23 @@ class ProjectDBGenerator:
               fileDic[funcName] = [lineCounter, selectedArgsList, tableName]
             except IndexError:
               fileDic[funcName] = [lineCounter, '', tableName]
+
+      # Now add the fields and the args.options
+      fields = ProjectDBGenerator.reSelfField.findall(line)
+      if len(fields) > 0:
+
+        # Be unsafe, reuse tableName, which was found before. Should kinda work as we're in an _init() anyway if a field matches
+        for field in fields:
+          # print(fileName, tableName, field)
+          fileDic[field] = [lineCounter, '', tableName]
+
+      argsOptions = ProjectDBGenerator.reArgsOption.findall(line)
+      if len(argsOptions) > 0:
+        # print('args Options', line, argsOptions)
+        for option in argsOptions:
+          # print(option, funcName)
+          fileDic['options.' + option] = [lineCounter, '', funcName]
+
     return fileDic
 
   #-----------------------------------------------------------------------------------------------
@@ -202,7 +226,7 @@ class ProjectDBGenerator:
         except:
           buf = ''
 
-        projDic[name] = ProjectDBGenerator.parseLuaFile(buf)
+        projDic[name] = ProjectDBGenerator.parseLuaFile(buf, name)
 
     return projDic
 
