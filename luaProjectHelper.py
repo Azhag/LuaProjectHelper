@@ -123,8 +123,12 @@ class ProjectDBGenerator:
   funcFindProg = re.compile('function\s+(.+?)\s*\)')
   wsProg = re.compile(r'\s+')
   reMethodArgs = re.compile("\((.*)\)")
-  reSelfField = re.compile("\s*self\.(\w+?)\s=")
-  reArgsOption = re.compile("\s*\{\'(\w+?)\',.*args.*\}")
+  reSelfField = re.compile("\s*self\.(\w+?)\s*=")
+
+  reArgsParseStart = re.compile("\s*local\s(\w+?)\s*=\s*args.parse.*")
+  reArgsParseIntoStart = re.compile("\s*args.parse(?:Lenient)?Into\((\w+?),.*")
+  reArgsDictOption = re.compile("\s*\{\'(\w+?)\',.*args.*\}")
+  reArgsParseEnd = re.compile("\s*(\)$)|(.*\}\)$)")
 
   def update():
     LuaProject.clear()
@@ -162,6 +166,8 @@ class ProjectDBGenerator:
     lineList = buf.splitlines()
     lineCounter = 0
 
+    argsCurrState = 0
+
     for line in lineList:
       lineCounter = lineCounter + 1
       funcs = ProjectDBGenerator.funcFindProg.findall(line)
@@ -198,21 +204,43 @@ class ProjectDBGenerator:
             except IndexError:
               fileDic[funcName] = [lineCounter, '', tableName]
 
-      # Now add the fields and the args.options
+      # Treat args, first check that args.parse is going on
+      if argsCurrState == 0:
+        argsParseStart = ProjectDBGenerator.reArgsParseStart.match(line)
+        if argsParseStart:
+          argsTarget = argsParseStart.group(1)
+          # print("Args parse starting: %s '%s' %s %s" % (argsTarget, line, argsCurrState, tableName))
+
+          argsCurrState = 1
+
+        argsParseIntoStart = ProjectDBGenerator.reArgsParseIntoStart.match(line)
+        if argsParseIntoStart:
+          argsTarget = argsParseIntoStart.group(1)
+          # print("Args parse into starting: %s '%s' %s %s" % (argsTarget, line, argsCurrState, tableName))
+          argsCurrState = 1
+
+      # Then look for all tables defining arguments
+      if argsCurrState == 1:
+        argsDictOptions = ProjectDBGenerator.reArgsDictOption.match(line)
+        
+        if argsDictOptions:
+          # print("args Options '%s' '%s'" %(line, argsDictOptions.group(1)))
+          # print(argsTarget + '.' + argsDictOptions.group(1))
+          fileDic[argsTarget + '.' + argsDictOptions.group(1)] = [lineCounter, '', funcName]
+
+        # Finally close the current args.parse call
+        argsParseEnd = ProjectDBGenerator.reArgsParseEnd.match(line)
+        if argsParseEnd:
+          # print("Args parse end: %s '%s' %s %s" % (argsParseEnd.group(), line, argsCurrState, tableName))
+          argsCurrState = 0
+
+      # Now add the fields
       fields = ProjectDBGenerator.reSelfField.findall(line)
       if len(fields) > 0:
-
         # Be unsafe, reuse tableName, which was found before. Should kinda work as we're in an _init() anyway if a field matches
         for field in fields:
           # print(fileName, tableName, field)
-          fileDic[field] = [lineCounter, '', tableName]
-
-      argsOptions = ProjectDBGenerator.reArgsOption.findall(line)
-      if len(argsOptions) > 0:
-        # print('args Options', line, argsOptions)
-        for option in argsOptions:
-          # print(option, funcName)
-          fileDic['options.' + option] = [lineCounter, '', funcName]
+          fileDic['self.' + field] = [lineCounter, '', tableName]
 
     return fileDic
 
